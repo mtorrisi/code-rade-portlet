@@ -1,0 +1,5 @@
+<!DOCTYPE project>
+
+<project name="code-rade-portlet" basedir="." default="deploy">
+	<import file="../build-common-portlet.xml" />
+</project>
