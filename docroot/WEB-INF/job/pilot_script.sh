@@ -1,51 +1,5 @@
 #!/bin/sh 
 #
-# myRepast-infection - portlet pilot script
-#
-# The following script does:
-#   o Perform a simulation using the provided parameters
-#   o Create a archive containinG the output file.  
-# 
-# Author: mario.torrisi@ct.infn.it
-#
-
-SW_NAME="repast" # Software name 
-
-echo "--------------------------------------------------"
-echo "Job execution starts on: '"$(date)"'"
-
-echo "---[HOME directory]-------------------------------"
-ls -l $HOME
-
-echo "---[Working directory]-------------------------"
-mkdir output
-ls -l $(pwd)
-
-/bin/bash $HOME/$SW_NAME/simulation.sh $1 $2 $3 $4 > stdout
-
-#
-# Following statement produce the simulation_output file
-#
-OUTFILE=simulation_output.txt
-echo "--------------------------------------------------"  > $OUTFILE
-echo "Simulation started at: '"$(date)"'"		  >> $OUTFILE 
-echo ""                                                   >> $OUTFILE
-echo "#################[  START LOG  ]##################" >> $OUTFILE
-echo ""                                                   >> $OUTFILE
-cat stdout			                          >> $OUTFILE
-echo "#################[   END LOG   ]##################" >> $OUTFILE
-echo ""                                                   >> $OUTFILE
-echo "Simulation ended at: '"$(date)"'"		          >> $OUTFILE
-echo "--------------------------------------------------" >> $OUTFILE
-echo ""                                                   >> $OUTFILE
-
-#
-# Collect all generated output files into a single tar.gz file
-#
-tar cvfz myRepast-infection-Files.tar.gz $OUTFILE output/
-
-#!/bin/sh 
-#
 # code-rade - portlet pilot script
 #
 
@@ -54,14 +8,13 @@ tar cvfz myRepast-infection-Files.tar.gz $OUTFILE output/
 export SITE=generic
 export OS=u1404
 export ARCH=x86_64
-export CVMFS_DIR=/cvmfs/fastrepo.sagrid.ac.za/
-export MODULE="/usr/bin/modulecmd bash"
-export MODULE_VERSION=3.2.10
-export MODULEPATH="/etc/environment-modules/modules:/usr/share/modules/versions:/usr/Modules/$MODULE_VERSION/modulefiles:/usr/share/modules/modulefiles"
+export CVMFS_DIR=/cvmfs/fastrepo.sagrid.ac.za
+
+. /etc/profile.d/modules.sh
 
 #load module
-$MODULE use $CVMFS_DIR/modules/libraries
-$MODULE use $CVMFS_DIR/modules/compilers
+module use $CVMFS_DIR/modules/libraries
+module use $CVMFS_DIR/modules/compilers
 
 # Get the hostname
 HOSTNAME=$(hostname -f)
@@ -107,13 +60,14 @@ echo ""                                                   >> $OUTFILE
 #sleep 10
 
 # Producing an output file 
-$MODULE avail
-$MODULE add jdk/8u66
-#java -version
+module avail
+module add jdk/8u66
 
-#javac $INFILE
-#java  $INFILE
-#cat $INFILE >> $OUTFILE
+java -version
+
+javac $INFILE
+java  $INFILE
+cat $INFILE >> $OUTFILE
 
 #
 # At the end of the script file it's a good practice to 

@@ -3,6 +3,7 @@
     Created on : Feb 15, 2016, 10:29:44 AM
     Author     : mario
 --%>
+
 <%@page contentType="text/html" pageEncoding="UTF-8"%>
 
 <%@page import="com.liferay.portal.kernel.util.PrefsParamUtil"%>
@@ -33,4 +34,5 @@
 
 <portlet:defineObjects/>
 <liferay-theme:defineObjects/>
+
 <%String currentURL = PortalUtil.getCurrentURL(request);%>

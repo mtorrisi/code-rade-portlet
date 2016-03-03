@@ -10,7 +10,9 @@ import it.infn.ct.GridEngine.Job.InfrastructureInfo;
 import it.infn.ct.GridEngine.Job.MultiInfrastructureJobSubmission;
 import it.infn.ct.GridEngine.JobResubmission.GEJobDescription;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.text.SimpleDateFormat;
@@ -56,20 +58,19 @@ import com.liferay.util.portlet.PortletProps;
  */
 public class CodeRadePortlet extends MVCPortlet {
 
+	private static final long UPLOAD_LIMIT = Long.parseLong(PortletProps.get("fileupload.limit"));
+	
+	private static final String APP_INFRASTRUCTURE_INFO_PREFERENCES = "appInfrastructureInfoPreferences";
+	private static final String APP_PREFERENCES = "appPreferences";
+	private static final String ROOT_FOLDER_NAME = PortletProps.get("fileupload.folder.path");
+    private static final String TS_FORMAT = "yyyyMMddHHmmss";
+	private static final String LS = System.getProperty("line.separator");;
+	
+	private final Log _log = LogFactoryUtil.getLog(CodeRadePortlet.class);
+	
 	private AppPreferences appPreferences;
 	private List<AppInfrastructureInfo> appInfrastructureInfoPreferences;
 		
-    private PortletConfig portletConfig;
-    private LiferayPortletConfig liferayPortletConfig;
-
-    private final static String ROOT_FOLDER_NAME = PortletProps.get("fileupload.folder.path");
-    private final static long UPLOAD_LIMIT = Long.parseLong(PortletProps.get("fileupload.limit"));
-    private static final String TS_FORMAT = "yyyyMMddHHmmss";
-	private static final String LS = System.getProperty("line.separator");;
-    
-    private final Log _log = LogFactoryUtil.getLog(CodeRadePortlet.class);
-
-
     @Override
     public void doView(RenderRequest renderRequest,
             RenderResponse renderResponse) throws IOException, PortletException {
@@ -102,8 +103,8 @@ public class CodeRadePortlet extends MVCPortlet {
         appPreferences = getAppPreferences(preferences);
         appInfrastructureInfoPreferences = getAppInfrastructureInfo(preferences);
         
-        renderRequest.setAttribute("appInfrastructureInfoPreferences", appInfrastructureInfoPreferences);
-        renderRequest.setAttribute("appPreferences", appPreferences);
+        renderRequest.setAttribute(APP_INFRASTRUCTURE_INFO_PREFERENCES, appInfrastructureInfoPreferences);
+        renderRequest.setAttribute(APP_PREFERENCES, appPreferences);
         
         super.doEdit(renderRequest, renderResponse);
     }
@@ -120,8 +121,8 @@ public class CodeRadePortlet extends MVCPortlet {
             ActionResponse actionResponse) throws IOException, PortletException {
 
         AppInput appInput = new AppInput();
-        portletConfig = (PortletConfig) actionRequest.getAttribute(JavaConstants.JAVAX_PORTLET_CONFIG);
-        liferayPortletConfig = (LiferayPortletConfig) portletConfig;
+        PortletConfig portletConfig = (PortletConfig) actionRequest.getAttribute(JavaConstants.JAVAX_PORTLET_CONFIG);
+        LiferayPortletConfig liferayPortletConfig = (LiferayPortletConfig) portletConfig;
 
         SimpleDateFormat dateFormat = new SimpleDateFormat(TS_FORMAT);
         String timestamp = dateFormat.format(Calendar.getInstance().getTime());
@@ -202,9 +203,9 @@ public class CodeRadePortlet extends MVCPortlet {
         String JSONAppPrefs_new = JSONFactoryUtil.looseSerialize(appPreferences_new);
         _log.debug(JSONAppPrefs_new);
         try {
-			preferences.setValue("appPreferences",JSONAppPrefs_new);
+			preferences.setValue(APP_PREFERENCES,JSONAppPrefs_new);
 			preferences.store();
-			_log.debug(preferences.getValue("appPreferences", null));
+			_log.debug(preferences.getValue(APP_PREFERENCES, null));
 		} catch (ReadOnlyException e) {
 			_log.error(e.getMessage());
 			SessionErrors.add(actionRequest, e.getMessage());
@@ -226,74 +227,101 @@ public class CodeRadePortlet extends MVCPortlet {
     * @param actionResponse
     * @throws IOException
     */
-    @ProcessAction(name = "addInfrastructure")
-    public void addInfrastructure(ActionRequest actionRequest,
+    @ProcessAction(name = "editInfrastructure")
+    public void editInfrastructure(ActionRequest actionRequest,
     		ActionResponse actionResponse) throws IOException {
-    	_log.debug("addInfrastructure()");
-	   
-    	boolean enabledInfrastructure = ParamUtil.getBoolean(actionRequest, "pref_enabledInfrastructure", true);
-	   	int currInfrastructure = ParamUtil.getInteger(actionRequest, "pref_currInfrastructure", -1);
-    	String nameInfrastructure = ParamUtil.getString(actionRequest, "pref_nameInfrastructure",  "");
-    	String acronymInfrastructure = ParamUtil.getString(actionRequest, "pref_acronymInfrastructure", "");
-    	String bdiiHost = ParamUtil.getString(actionRequest, "pref_bdiiHost", "");
-    	String wmsHosts = ParamUtil.getString(actionRequest, "pref_wmsHosts", "");
-    	String pxServerHost = ParamUtil.getString(actionRequest, "pref_pxServerHost", "");
-    	String pxServerPort = ParamUtil.getString(actionRequest,  "pref_pxServerPort", "");
-    	boolean pxServerSecure = ParamUtil.getBoolean(actionRequest, "pref_pxServerSecure", true);
-    	String pxRobotId = ParamUtil.getString(actionRequest, "pref_pxRobotId", "");
-	   	String pxRobotVO = ParamUtil.getString(actionRequest, "pref_pxRobotVO", "");
-	   	String pxRobotRole = ParamUtil.getString(actionRequest, "pref_pxRobotRole", "");
-	   	boolean pxRobotRenewalFlag = ParamUtil.getBoolean(actionRequest, "pref_pxRobotRenewalFlag", true);
-	   	String pxUserProxy = ParamUtil.getString(actionRequest, "pref_pxUserProxy", "");
-	   	String softwareTags = ParamUtil.getString(actionRequest, "pref_softwareTags", "");
-	   	
-	   	AppInfrastructureInfo appInfrastructureInfo = new AppInfrastructureInfo(currInfrastructure
-	   			, enabledInfrastructure
-	   			, nameInfrastructure
-	   			, acronymInfrastructure
-	   			, bdiiHost
-	   			, wmsHosts
-	   			, pxServerHost
-	   			, pxServerPort
-	   			, pxServerSecure
-               	, pxRobotId
-               	, pxRobotVO
-               	, pxRobotRole
-               	, pxRobotRenewalFlag
-               	, pxUserProxy
-               	, softwareTags
+    	_log.debug("editInfrastructure()");
+    	
+    	boolean missedFields = false;
+    	
+    	if (ParamUtil.getString(actionRequest, "pref_nameInfrastructure").equals("")) {
+    		_log.warn("Empty infrastructure name");
+			SessionErrors.add(actionRequest, "empty-infra-name");
+			missedFields = true;
+    	} 
+    	
+    	if (ParamUtil.getString(actionRequest, "pref_acronymInfrastructure").equals("")) {
+    		_log.warn("Empty infrastructure acronym");
+			SessionErrors.add(actionRequest, "empty-infra-acronym");
+			missedFields = true;
+    	} 
+    	
+    	if(!missedFields){
+    		boolean enabledInfrastructure = ParamUtil.getBoolean(actionRequest, "pref_enabledInfrastructure", true);
+	   		int currInfrastructure = ParamUtil.getInteger(actionRequest, "pref_currInfrastructure", -1);
+	   		String nameInfrastructure = ParamUtil.getString(actionRequest, "pref_nameInfrastructure");
+    		String acronymInfrastructure = ParamUtil.getString(actionRequest, "pref_acronymInfrastructure");
+    		String bdiiHost = ParamUtil.getString(actionRequest, "pref_bdiiHost", "");
+    		String wmsHosts = ParamUtil.getString(actionRequest, "pref_wmsHosts", "");
+    		String pxServerHost = ParamUtil.getString(actionRequest, "pref_pxServerHost", "");
+    		String pxServerPort = ParamUtil.getString(actionRequest,  "pref_pxServerPort", "");
+    		boolean pxServerSecure = ParamUtil.getBoolean(actionRequest, "pref_pxServerSecure", true);
+    		String pxRobotId = ParamUtil.getString(actionRequest, "pref_pxRobotId", "");
+	   		String pxRobotVO = ParamUtil.getString(actionRequest, "pref_pxRobotVO", "");
+	   		String pxRobotRole = ParamUtil.getString(actionRequest, "pref_pxRobotRole", "");
+	   		boolean pxRobotRenewalFlag = ParamUtil.getBoolean(actionRequest, "pref_pxRobotRenewalFlag", true);
+	   		String pxUserProxy = ParamUtil.getString(actionRequest, "pref_pxUserProxy", "");
+	   		String softwareTags = ParamUtil.getString(actionRequest, "pref_softwareTags", "");
+	   		if(currInfrastructure > 0){
+	   			AppInfrastructureInfo appInfrastructureInfo = new AppInfrastructureInfo(currInfrastructure
+   					, enabledInfrastructure
+   					, nameInfrastructure
+   					, acronymInfrastructure
+   					, bdiiHost
+   					, wmsHosts
+   					, pxServerHost
+   					, pxServerPort
+   					, pxServerSecure
+           			, pxRobotId
+           			, pxRobotVO
+           			, pxRobotRole
+           			, pxRobotRenewalFlag
+           			, pxUserProxy
+           			, softwareTags
 	   			);
-	   
-	   	PortletPreferences preferences = actionRequest.getPreferences();
 	   	
-	   	List<AppInfrastructureInfo> appInfrastructureInfosPreferences = getAppInfrastructureInfo(preferences);
-	   	appInfrastructureInfosPreferences.add(appInfrastructureInfo);
+	   			PortletPreferences preferences = actionRequest.getPreferences();
+	   	   	
+	   			if(appInfrastructureInfo.getId() <= appInfrastructureInfoPreferences.size()){
+	   				_log.debug("Updating infrastructure: " + appInfrastructureInfo.dump());
+	   				appInfrastructureInfoPreferences.set(appInfrastructureInfo.getId() - 1, appInfrastructureInfo);
+	   			} else {
+	   				_log.debug("Adding infrastructure: " + appInfrastructureInfo.dump());
+	   				appInfrastructureInfoPreferences.add(appInfrastructureInfo);
+	   			}
 	   	
-	   	JSONArray jsonArray = createJSONArray(appInfrastructureInfosPreferences);
+	   			JSONArray jsonArray = createJSONArray(appInfrastructureInfoPreferences);
 	   	
-	    try {
-			storeInfrastructureInfo(actionRequest, preferences, jsonArray);
-			SessionMessages.add(actionRequest, "infra-saved-success");
-		} catch (ReadOnlyException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (ValidatorException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+	   			try {
+	   				storeInfrastructureInfo(actionRequest, preferences, jsonArray);
+					SessionMessages.add(actionRequest, "infra-saved-success");
+	   			} catch (ReadOnlyException e) {
+				e.printStackTrace();
+				} catch (ValidatorException e) {
+					e.printStackTrace();
+				}
+	   		} else {
+	   			SessionMessages.add(actionRequest, "");
+	   			_log.debug("No action preformed");
+	   		}
+    	} else {
+    		PortalUtil.copyRequestParameters(actionRequest, actionResponse);
+            actionResponse.setRenderParameter("jspPage", "/jsps/edit-infrastructure.jsp");
+    	}
+    	
     }
     
     @ProcessAction(name = "disableInfra")
     public void disableInfra(ActionRequest actionRequest,
     		ActionResponse actionResponse){
     	_log.debug("disableInfra()");
-    	int infraId = Integer.parseInt(ParamUtil.getString(actionRequest, "id", "-1"));
-	   	if(infraId != -1){
+    	int infraId = ParamUtil.getInteger(actionRequest, "id", -1);
+	   	if(infraId > 0 && infraId <= appInfrastructureInfoPreferences.size()){
 	   		PortletPreferences preferences = actionRequest.getPreferences();
-		   	List<AppInfrastructureInfo> appInfrastructureInfosPreferences = getAppInfrastructureInfo(preferences);
-		   	appInfrastructureInfosPreferences.get(infraId - 1).setEnableInfrastructure(!appInfrastructureInfosPreferences.get(infraId - 1).isEnableInfrastructure());;		   
-		   	_log.debug("Infrastructure " + (infraId - 1) + " is enabled: " + appInfrastructureInfosPreferences.get(infraId - 1).isEnableInfrastructure());
-		   	JSONArray jsonArray = createJSONArray(appInfrastructureInfosPreferences);
+
+	   		appInfrastructureInfoPreferences.get(infraId - 1).setEnableInfrastructure(!appInfrastructureInfoPreferences.get(infraId - 1).isEnableInfrastructure());		   
+		   	_log.debug("Infrastructure " + (infraId - 1) + " is enabled: " + appInfrastructureInfoPreferences.get(infraId - 1).isEnableInfrastructure());
+		   	JSONArray jsonArray = createJSONArray(appInfrastructureInfoPreferences);
 		   	try {
 				storeInfrastructureInfo(actionRequest, preferences, jsonArray);
 				SessionMessages.add(actionRequest, "infra-toggle-success");
@@ -308,29 +336,37 @@ public class CodeRadePortlet extends MVCPortlet {
 				e.printStackTrace();
 			}
 	   	} else {
-	   		_log.warn("No valid infrastructure id: " + infraId);
+	   		SessionMessages.add(actionRequest, "");
+	   		_log.debug("No action preformed");
 	   	}
     }
-
-    @ProcessAction(name = "editInfra")
-    public void editInfra(ActionRequest actionRequest,
-    		ActionResponse actionResponse){
-    	_log.debug("editInfra()");
-    	//TODO
-    } 
     
     @ProcessAction(name = "deleteInfra")
     public void deleteInfra(ActionRequest actionRequest,
     		ActionResponse actionResponse){
-    	_log.debug("deleteInfra()");
     		   	
-	   	int infraId = Integer.parseInt(ParamUtil.getString(actionRequest, "id", "-1"));
-	   	if(infraId != -1){
+	   	int infraId = ParamUtil.getInteger(actionRequest, "id", -1);
+	   	_log.debug("deleteInfra()");
+	   	if(infraId > 0){
 	   		PortletPreferences preferences = actionRequest.getPreferences();
-		   	List<AppInfrastructureInfo> appInfrastructureInfosPreferences = getAppInfrastructureInfo(preferences);
-		   	AppInfrastructureInfo tmp = appInfrastructureInfosPreferences.remove(infraId - 1);
-		   	_log.debug("Deleted Infrastructure: " + tmp.dump());
-		   	JSONArray jsonArray = createJSONArray(appInfrastructureInfosPreferences);
+
+	   		AppInfrastructureInfo[] tmp_appInfrastructureInfoPreferences = new AppInfrastructureInfo[appInfrastructureInfoPreferences.size()];
+			appInfrastructureInfoPreferences.toArray(tmp_appInfrastructureInfoPreferences);
+	   		appInfrastructureInfoPreferences = new ArrayList<AppInfrastructureInfo>();
+	   		int c = 1;	   		
+	   		for (int i = 0; i < tmp_appInfrastructureInfoPreferences.length; i++) {
+				AppInfrastructureInfo appInfrastructureInfo = tmp_appInfrastructureInfoPreferences[i];
+				if(appInfrastructureInfo.getId() == infraId){
+					_log.debug("Deleting Infrastructure: " + appInfrastructureInfo.dump());
+					c = 0;
+				}else{
+					appInfrastructureInfo.setId(i + c);
+					appInfrastructureInfoPreferences.add(appInfrastructureInfo);
+				}
+			}
+
+	   		JSONArray jsonArray = createJSONArray(appInfrastructureInfoPreferences);
+		   	
 		   	try {
 				storeInfrastructureInfo(actionRequest, preferences, jsonArray);
 				SessionMessages.add(actionRequest, "infra-delete-success");
@@ -345,15 +381,30 @@ public class CodeRadePortlet extends MVCPortlet {
 				e.printStackTrace();
 			}
 	   	} else {
-	   		_log.warn("No valid infrastructure id: " + infraId);
+	   		SessionMessages.add(actionRequest, "");
+	   		_log.debug("No action preformed");
 	   	}
     }
+    
+    @ProcessAction(name = "pilotScript")
+    public void pilotScript(ActionRequest actionRequest,
+    		ActionResponse actionResponse) throws IOException{
+    	_log.debug("pilotScript()");
+    	PortletConfig portletConfig = (PortletConfig) actionRequest.getAttribute(JavaConstants.JAVAX_PORTLET_CONFIG);
+        LiferayPortletConfig liferayPortletConfig = (LiferayPortletConfig) portletConfig;
+    	
+    	String pilotScript = ParamUtil.getString(actionRequest, "pilotScript");
+    	_log.debug("pilotScript() " + pilotScript);
+    	String appServerPath = actionRequest.getPortletSession().getPortletContext().getRealPath(File.separator);
+    	    	
+    	PortalUtil.copyRequestParameters(actionRequest, actionResponse);
+    	actionResponse.setRenderParameter("jspPage", "/jsps/view-pilot.jsp");
+    	actionRequest.setAttribute("pilotScript", updateString(appServerPath + "WEB-INF/job/" + pilotScript));
         
-    @ProcessAction(name = "saveInfrastructure")
-    public void saveInfrastructure(ActionRequest actionRequest,
-    		ActionResponse actionResponse){
-    	_log.debug("saveInfrastructure()");
+        SessionMessages.add(actionRequest, liferayPortletConfig.getPortletId() + SessionMessages.KEY_SUFFIX_HIDE_DEFAULT_ERROR_MESSAGE);
+        
     }
+    
     
     private String processInputFile(UploadPortletRequest uploadRequest, 
     		String username, String timestamp, AppInput appInput) throws CodeRadePortletException, IOException {
@@ -399,7 +450,7 @@ public class CodeRadePortlet extends MVCPortlet {
     }
     
     private AppPreferences getAppPreferences(PortletPreferences preferences) {
-		String JSONAppPrefs = preferences.getValue("appPreferences", null);
+		String JSONAppPrefs = preferences.getValue(APP_PREFERENCES, null);
         AppPreferences appPreferences=new AppPreferences();
         if(JSONAppPrefs!=null)
         	appPreferences = JSONFactoryUtil.looseDeserialize(JSONAppPrefs, AppPreferences.class);
@@ -409,7 +460,7 @@ public class CodeRadePortlet extends MVCPortlet {
     
 	private List<AppInfrastructureInfo> getAppInfrastructureInfo(PortletPreferences preferences) {
 		_log.debug("getAppInfrastructureInfo()");
-		String JSONAppInfrastructuresInfo = preferences.getValue("appInfrastructureInfoPreferences", null);
+		String JSONAppInfrastructuresInfo = preferences.getValue(APP_INFRASTRUCTURE_INFO_PREFERENCES, null);
         List<AppInfrastructureInfo> appInfrastructureInfoPreferences = new ArrayList<AppInfrastructureInfo>();
         if(JSONAppInfrastructuresInfo != null){
         	try {
@@ -449,12 +500,32 @@ public class CodeRadePortlet extends MVCPortlet {
 		String JSONAppInfrastructureInfosPreferences_new = JSONFactoryUtil.looseSerialize(jsonArray);
         _log.debug(JSONAppInfrastructureInfosPreferences_new);
       
-		preferences.setValue("appInfrastructureInfoPreferences",JSONAppInfrastructureInfosPreferences_new);
+		preferences.setValue(APP_INFRASTRUCTURE_INFO_PREFERENCES,JSONAppInfrastructureInfosPreferences_new);
 		preferences.store();
 		SessionMessages.add(actionRequest, "saved-infra");
-		_log.debug(preferences.getValue("appInfrastructureInfoPreferences", null));
+		_log.debug(preferences.getValue(APP_INFRASTRUCTURE_INFO_PREFERENCES, null));
         
 	}
+	
+	/**
+     * This method takes as input a filename and will transfer its content inside a String variable
+     *
+     * @param file A complete path to a given file
+     * @return File content into a String
+     * @throws IOException
+     */
+    private String updateString(String file) throws IOException {
+        String line;
+        StringBuilder stringBuilder = new StringBuilder();
+        BufferedReader reader = new BufferedReader( new FileReader (file));
+        while((line = reader.readLine()) != null ) {
+            stringBuilder.append(line);
+            stringBuilder.append(LS);
+        }
+        reader.close();
+        _log.debug(stringBuilder.toString());
+        return stringBuilder.toString();
+    }
 	
     private void submitJob(String appServerPath, AppInput appInput, InfrastructureInfo[] enabledInfrastructures) {
 
@@ -654,63 +725,61 @@ public class CodeRadePortlet extends MVCPortlet {
                            +LS+" username:      '" + username    +"'"
                            +LS+" password:      '" + password    +"'"
                            +LS+" JSAGA adaptor: '" + wmsHostList +"'"
-                             );
-                } 
-//                else if(enabledAppInfrastructureInfo.getAcronymInfrastructure().equalsIgnoreCase("rocci")) {
-//                    // Multi-infrastructure support (field mapping)
-//                    // rocci requires to specify:
-//                    // * OCCI_ENDPOINT_HOST -> bdiiHost first  field of the given ';' separated string
-//                    // * Password      -> bdiiHost second field of the given ';' separated string
-//                    // * JSAGA adaptor -> wmsHosts
-//                    
-//                    String OCCI_ENDPOINT_HOST = wmsHostList[0];
-//                 
-//                    String OCCI_AUTH = "x509";
-//                    
-//                    // Possible RESOURCE values: 'os_tpl', 'resource_tpl', 'compute'
-//                    String OCCI_RESOURCE = "compute";
-//                    String OCCI_VM_TITLE = "RepastAnalysis";
-//                    
-//                    // Possible ACTION values: 'list', 'describe', 'create' and 'delete'
-//                    String OCCI_ACTION = "create";
-//                    
-//                    String[] occiItems = enabledAppInfrastructureInfo.getSoftwareTags().split(";");
-//                    int occiItemscount = occiItems.length;
-//                    
-//                    String OCCI_OS = "";
-//                    String OCCI_FLAVOR = "";
-//                    
-//                    if(occiItemscount>0) 
-//                        OCCI_OS=occiItems[0].trim();
-//                    if(occiItemscount>1) 
-//                        OCCI_FLAVOR=occiItems[1].trim();
-//                    
-//                    String rOCCIURL = OCCI_ENDPOINT_HOST + "?" +
-//                            "action=" + OCCI_ACTION + 
-//                            "&resource=" + OCCI_RESOURCE +
-//                            "&attributes_title=" + OCCI_VM_TITLE +
-//                            "&mixin_os_tpl=" + OCCI_OS +
-//                            "&mixin_resource_tpl=" + OCCI_FLAVOR +
-//                            "&auth=" + OCCI_AUTH;
-//		
-//                    String rOCCIResourcesList[] = {rOCCIURL};
-//                                        
-//                    infrastructuresInfo[h++] = new InfrastructureInfo(
-//                            getAcronymInfrastructure(i), 
-//                            getBdiiHost(i), 
-//                            rOCCIResourcesList, 
-//                            getPxServerHost(i), 
-//                            getPxServerPort(i), 
-//                            getPxRobotId(i), 
-//                            getPxRobotVO(i), 
-//                            getPxRobotRole(i), 
-//                            true
-//                    );
-//                    if(_log !=null)
-//                        _log.info(LS+"*******************************"
-//                                 +LS+"OCCI resource URL: " + rOCCIURL
-//                                 +LS+"*******************************");
-//                }
+                    );
+                } else if(enabledAppInfrastructureInfo.getAcronymInfrastructure().equalsIgnoreCase("rocci")) {
+                    // Multi-infrastructure support (field mapping)
+                    // rocci requires to specify:
+                    // * OCCI_ENDPOINT_HOST -> bdiiHost first  field of the given ';' separated string
+                    // * Password      -> bdiiHost second field of the given ';' separated string
+                    // * JSAGA adaptor -> wmsHosts
+                    
+                    String OCCI_ENDPOINT_HOST = wmsHostList[0];
+                 
+                    String OCCI_AUTH = "x509";
+                    
+                    // Possible RESOURCE values: 'os_tpl', 'resource_tpl', 'compute'
+                    String OCCI_RESOURCE = "compute";
+                    String OCCI_VM_TITLE = enabledAppInfrastructureInfo.getBdiiHost();
+                    
+                    // Possible ACTION values: 'list', 'describe', 'create' and 'delete'
+                    String OCCI_ACTION = "create";
+                    
+                    String[] occiItems = enabledAppInfrastructureInfo.getSoftwareTags().split(";");
+                    int occiItemscount = occiItems.length;
+                    
+                    String OCCI_OS = "";
+                    String OCCI_FLAVOR = "";
+                    
+                    if(occiItemscount>0) 
+                        OCCI_OS=occiItems[0].trim();
+                    if(occiItemscount>1) 
+                        OCCI_FLAVOR=occiItems[1].trim();
+                    
+                    String rOCCIURL = OCCI_ENDPOINT_HOST + "?" +
+                            "action=" + OCCI_ACTION + 
+                            "&resource=" + OCCI_RESOURCE +
+                            "&attributes_title=" + OCCI_VM_TITLE +
+                            "&mixin_os_tpl=" + OCCI_OS +
+                            "&mixin_resource_tpl=" + OCCI_FLAVOR +
+                            "&auth=" + OCCI_AUTH;
+		
+                    String rOCCIResourcesList[] = {rOCCIURL};
+                                        
+                    infrastructuresInfo[h++] = new InfrastructureInfo(enabledAppInfrastructureInfo.getAcronymInfrastructure(), 
+                            											"", 
+                            											rOCCIResourcesList, 
+                            											enabledAppInfrastructureInfo.getPxServerHost(),
+                            											enabledAppInfrastructureInfo.getPxServerPort(), 
+                            											enabledAppInfrastructureInfo.getPxRobotId(), 
+                            											enabledAppInfrastructureInfo.getPxRobotVO(), 
+                            											enabledAppInfrastructureInfo.getPxRobotRole(), 
+                            											true
+                    							);
+                    if(_log !=null)
+                        _log.info(LS+"*******************************"
+                                 +LS+"OCCI resource URL: " + rOCCIURL
+                                 +LS+"*******************************");
+                }
                 else {
                     // Multi-infrastructure support (no matching cases)
                     // If the acronym does not match to a specific infrastructure type

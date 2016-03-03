@@ -15,8 +15,6 @@
 		<portlet:param name="id" value="<%= String.valueOf(infrastructureInfo.getId()) %>"/>
 		<portlet:param name="enabled" value="<%= String.valueOf(infrastructureInfo.isEnableInfrastructure()) %>"/>
 	</liferay-portlet:actionURL>
-	
-	
 	<c:if test="<%= infrastructureInfo.isEnableInfrastructure() %>">
         <liferay-ui:icon
             image="deactivate"
@@ -34,7 +32,8 @@
 	<liferay-portlet:renderURL var="editInfraURL">
 		<liferay-portlet:param name="backURL" value="<%= currentURL %>"/>
         <liferay-portlet:param name="infrastructure" value="<%= JSONFactoryUtil.looseSerialize(infrastructureInfo) %>" />
-        <liferay-portlet:param name="jspPage"  value="/jsps/addInfrastructure.jsp"/>
+        <liferay-portlet:param name="jspPage"  value="/jsps/edit-infrastructure.jsp"/>
+        <liferay-portlet:param name="update" value="true" />
     </liferay-portlet:renderURL>
     <liferay-ui:icon 
         image="edit" 

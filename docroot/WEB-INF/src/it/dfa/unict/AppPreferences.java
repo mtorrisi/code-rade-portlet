@@ -127,7 +127,7 @@ public class AppPreferences {
 				+ "gridOperationId              : '" + gridOperationId
 				+ "'" + LS + "gridOperationDesc            : '"
 				+ gridOperationDesc + "'" + LS
-				+ "numInfrastructures           : '" + numInfrastructures
+				+ "numInfrastructures           : '" + numInfrastructures + "'"
 				+ LS + "jobRequirements              : '"
 				+ jobRequirements + "'" + LS
 				+ "pilotScript                  : '" + pilotScript + "'"

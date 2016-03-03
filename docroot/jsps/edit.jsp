@@ -24,33 +24,26 @@
 %>
 
 
-<liferay-portlet:actionURL name="savePreferences"
-	var="savePreferencesUrl" />
+<liferay-portlet:actionURL name="savePreferences" var="savePreferencesUrl" />
+<liferay-portlet:renderURL var="addInfrastructureUrl" windowState="normal">
+	<liferay-portlet:param name="mvcPath" value="/jsps/edit-infrastructure.jsp"/>
+	<liferay-portlet:param name="backURL" value="<%= currentURL %>"/>
+	<liferay-portlet:param name="infrastrucuresCount" value="<%= String.valueOf(infrastrucuresCount) %>"/>
+	<liferay-portlet:param name="add" value="<%= String.valueOf(true) %>"/>
+</liferay-portlet:renderURL>
 
-<portlet:renderURL var="addInfrastructureUrl" windowState="normal">
-	<portlet:param name="mvcPath" value="/jsps/addInfrastructure.jsp"/>
-	<portlet:param name="backURL" value="<%= currentURL %>"/>
-	<portlet:param name="infrastrucuresCount" value="<%= String.valueOf(infrastrucuresCount) %>"/>
-	<portlet:param name="add" value="<%= String.valueOf(true) %>"/>
-</portlet:renderURL>
-
-<portlet:renderURL var="editInfrastructureUrl" windowState="normal">
-	<portlet:param name="mvcPath" value="/jsps/addInfrastructure.jsp"/>
-	<portlet:param name="backURL" value="<%= currentURL %>"/>
-</portlet:renderURL>
-
-<portlet:actionURL var="saveInfrastructureUrl" name="saveInfrastructure">
-</portlet:actionURL>
+<liferay-portlet:actionURL name="pilotScript" var="pilotScriptUrl" >
+	<liferay-portlet:param name="pilotScript" value="<%= appPreferences.getPilotScript() %>" />
+</liferay-portlet:actionURL>
 
 <aui:form action="${savePreferencesUrl}" name="aForm" method="post">
+<aui:fieldset label="generic-pref-lbl">
+<aui:field-wrapper>
+   	<aui:button name="save" value="save" type="submit" />
+</aui:field-wrapper>
 <aui:layout> 
     <aui:column columnWidth="50" first="true" >
 		<table class="table_prefs">
-	
-			<tr>
-				<th colspan="2"><b>Portlet generic preferences </b> <hr/> </th>		
-			</tr>
-	
 	     	<tr>
 	         	<td ><b>Application Identifier</b></td>
 	         	<td><aui:input type="text" name="pref_gridOperationId" label="" style="width: 98%"	
@@ -71,14 +64,21 @@
 	         	<td><aui:input type="checkbox" name="pref_productionEnv" label=""
 	                    id="productionEnv" title="Production environment" checked="<%=appPreferences.isProductionEnviroment() %>" onChange="showDevEnvPanel()"/></td>
 	     	</tr>
+   			<tr>
+       			<td ><b>Application job requirements</b></td>
+       			<td><aui:input type="textarea" name="pref_jobRequirements" label="" style="width: 98%"	
+               	    id="jobRequirements" title="Application requirements" value="<%= appPreferences.getJobRequirements() %>"/></td>
+   			</tr>
+   			<tr>
+       			<td ><aui:button id="add" name="add" value="Pilot script" onClick="<%= pilotScriptUrl %>"/></td>
+       			<td><aui:input type="text" name="pref_pilotScript" label="" style="width: 98%"
+               	    id="pilotScript" title="Application pilot script" value="<%=appPreferences.getPilotScript() %>"/></td>
+   			</tr>
 		</table>
 	</aui:column>
 	<aui:column columnWidth="50" last="true">
 		<div id="devEnvPrefs">
 			<table class="table_prefs" >
-				<tr>
-					<th colspan="2"><b>Development environment preferences</b><hr/></th>		
-				</tr>
      			<tr>
          			<td ><b>UserTrackingDB hostname	</b></td>
          			<td><aui:input type="text" name="pref_sciGwyUserTrackingDB_Hostname" label="" style="width: 98%"	
@@ -103,43 +103,14 @@
 		</div>
 	</aui:column>
 </aui:layout>
-<aui:layout> 
-    <aui:column columnWidth="100" first="true" >
-	<table class="table_prefs">
-			<tr>
-				<th colspan="2"><b>Application specific preferences</b><hr/></th>		
-			</tr>
-     		<tr>
-        		<td ><b>Application job requirements</b></td>
-         		<td><aui:input type="textarea" name="pref_jobRequirements" label="" style="width: 98%"	
-                    id="jobRequirements" title="Application requirements" value="<%= appPreferences.getJobRequirements() %>"/></td>
-     		</tr>
-     		<tr>
-         		<td ><input type="submit" onclick="setAction('viewPilot');" value="Application pilot script"></td>
-         		<td><aui:input type="text" name="pref_pilotScript" label="" style="width: 98%"
-                    id="pilotScript" title="Application pilot script" value="<%=appPreferences.getPilotScript() %>"/></td>
-     		</tr>
-		</table>
-    </aui:column>
-</aui:layout>
-<aui:layout> 
-    <aui:column columnWidth="100" first="true" >
-     	<aui:field-wrapper>
-        	<aui:button name="save" value="Save" type="submit" />
-     	</aui:field-wrapper>
-     </aui:column>
-</aui:layout>
+</aui:fieldset>
 </aui:form>
-
 <aui:layout> 
+<aui:fieldset label="available-infras">
     <aui:column columnWidth="100" first="true" >
-		<div><b><b>Available Infrastructures</b></b><hr/></div>
 			<aui:field-wrapper>
-<%-- 				<aui:button name="saveInfra" value="Save" onClick="<%= saveInfrastructureUrl %>"/> --%>
-				<aui:button id="add" name="add" value="Add new" onClick="<%= addInfrastructureUrl %>"/>
-<%-- 				<aui:button name="deleteInfras" value="delete" type="button"/> --%>
+				<aui:button id="add" name="add" value="add-new" onClick="<%= addInfrastructureUrl %>"/>
 			</aui:field-wrapper>
-
 			<liferay-ui:success key="infra-saved-success" message="infra-saved-success" />
 			<liferay-ui:success key="infra-delete-success" message="infra-delete-success" />
 			<liferay-ui:success key="infra-toggle-success" message="infra-toggle-success" />
@@ -150,7 +121,7 @@
 				<liferay-ui:search-container-row modelVar="infrastructure" 
 						className="it.dfa.unict.AppInfrastructureInfo" >						
 					<liferay-ui:search-container-column-text name="name"
-						value="<%=infrastructure.getNameInfrastructure()%>" href="<%=editInfrastructureUrl + "&id=" + infrastructure.getId() %>" />
+						value="<%=infrastructure.getNameInfrastructure()%>" />
 					<liferay-ui:search-container-column-text name="acronym"
 						value="<%=infrastructure.getAcronymInfrastructure()%>" />
 					<liferay-ui:search-container-column-text name="status">
@@ -161,6 +132,7 @@
 				<liferay-ui:search-iterator searchContainer="<%= searchContainer %>" />
 			</liferay-ui:search-container>
      </aui:column>
+</aui:fieldset>
 </aui:layout>
 
 <script type="text/javascript">
