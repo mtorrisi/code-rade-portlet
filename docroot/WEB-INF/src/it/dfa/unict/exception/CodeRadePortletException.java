@@ -11,9 +11,6 @@ package it.dfa.unict.exception;
  */
 public class CodeRadePortletException extends Exception {
 
-    /**
-	 * 
-	 */
 	private static final long serialVersionUID = 3487698278792565328L;
 
 	public CodeRadePortletException(String message) {

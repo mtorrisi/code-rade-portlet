@@ -6,9 +6,13 @@
 package it.dfa.unict;
 
 import it.dfa.unict.exception.CodeRadePortletException;
+import it.infn.ct.GridEngine.Job.InfrastructureInfo;
+import it.infn.ct.GridEngine.Job.MultiInfrastructureJobSubmission;
+import it.infn.ct.GridEngine.JobResubmission.GEJobDescription;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -54,13 +58,14 @@ public class CodeRadePortlet extends MVCPortlet {
 
 	private AppPreferences appPreferences;
 	private List<AppInfrastructureInfo> appInfrastructureInfoPreferences;
-	
+		
     private PortletConfig portletConfig;
     private LiferayPortletConfig liferayPortletConfig;
 
     private final static String ROOT_FOLDER_NAME = PortletProps.get("fileupload.folder.path");
     private final static long UPLOAD_LIMIT = Long.parseLong(PortletProps.get("fileupload.limit"));
     private static final String TS_FORMAT = "yyyyMMddHHmmss";
+	private static final String LS = System.getProperty("line.separator");;
     
     private final Log _log = LogFactoryUtil.getLog(CodeRadePortlet.class);
 
@@ -136,7 +141,10 @@ public class CodeRadePortlet extends MVCPortlet {
             String jobIdentifier = ParamUtil.getString(actionRequest, "jobIdentifier", appInput.getModelName() + "_" + appInput.getTimestamp());
             appInput.setJobIdentifier(jobIdentifier);
             _log.info(appInput);
-            submitJob(appServerPath, appInput);
+            
+            InfrastructureInfo[] enabledInfrastructures = getEnabledInfrastructures(appInfrastructureInfoPreferences);
+                      
+            submitJob(appServerPath, appInput, enabledInfrastructures);
 
             PortalUtil.copyRequestParameters(actionRequest, actionResponse);
             actionResponse.setRenderParameter("jobIdentifier", jobIdentifier);
@@ -448,7 +456,7 @@ public class CodeRadePortlet extends MVCPortlet {
         
 	}
 	
-    private void submitJob(String appServerPath, AppInput appInput) {
+    private void submitJob(String appServerPath, AppInput appInput, InfrastructureInfo[] enabledInfrastructures) {
 
         // Job details
         String executable = "/bin/sh";                       // Application executable
@@ -459,11 +467,276 @@ public class CodeRadePortlet extends MVCPortlet {
         String appFile = "code-rade-Files.tar.gz";         // Hostname output files (created by the pilot script)
 
         // InputSandbox (string with comma separated list of file names)
-//        String inputSandbox = appServerPath + File.separator + "WEB-INF/job/" //
-//                + appPreferences.getPilotScript() // pilot script
-//                + "," + appInput.inputSandbox_inputFile // input file
-//                ;
+        String inputSandbox=appServerPath+"WEB-INF/job/"    //
+                           +appPreferences.getPilotScript() // pilot script
+                           +","+appInput.getInputSandbox() // input file
+                           ;
+                
         // OutputSandbox (string with comma separated list of file names)
         String outputSandbox = appFile;                       // Output file
+        
+     // Take care of job requirements
+        // More requirements can be specified in the preference value 'jobRequirements'
+        // separating each requirement by the ';' character
+        // The loop prepares a string array with GridEngine/JSAGA compliant requirements
+        String jdlRequirements[] = appPreferences.getJobRequirements().split(";");
+        int numRequirements=0;
+        for(int i=0; i<jdlRequirements.length; i++) {
+            if(!jdlRequirements[i].equals("")) {
+              jdlRequirements[numRequirements] = "JDLRequirements=("+jdlRequirements[i]+")";
+              numRequirements++;
+              _log.info("Requirement["+i+"]='"+jdlRequirements[i]+"'");
+            }
+        } // for each jobRequirement
+        
+        // Prepare the GridEngine job description
+        GEJobDescription jobDesc = new GEJobDescription();
+        jobDesc.setExecutable (   executable); // Specify the executeable
+        jobDesc.setArguments  (    arguments); // Specify the application' arguments
+        jobDesc.setOutputPath (   outputPath); // Specify the output directory
+        jobDesc.setOutput     (   outputFile); // Specify the std-output file
+        jobDesc.setError      (    errorFile); // Specify the std-error file
+        jobDesc.setOutputFiles(outputSandbox); // Setup output files (OutputSandbox) (*)
+        jobDesc.setInputFiles ( inputSandbox); // Setut input files (InputSandbox)
+        
+        // GridEngine' MultiInfrastructure job submission object
+        MultiInfrastructureJobSubmission miJobSubmission=null;
+        
+        // Initialize the GridEngine Multi Infrastructure Job Submission object
+        //
+        //  GridEngine uses two different kind of constructors. The constructor
+        //  taking no database arguments is used for production environments, while
+        //  the constructor taking SciGwyUserTrackingDB parameters is normally used
+        //  for development purposes. In order to switch-on the production constructor
+        //  just set to empty strings the following portlet init parameters or form
+        //  the portlet preferences:
+        //      sciGwyUserTrackingDB_Hostname
+        //      sciGwyUserTrackingDB_Username
+        //      sciGwyUserTrackingDB_Password
+        //      sciGwyUserTrackingDB_Database
+        //
+        if(!appPreferences.isProductionEnviroment()){
+        	String DBNM="jdbc:mysql://" + appPreferences.getSciGwyUserTrackingDB_Hostname() +
+                    "/" + appPreferences.getSciGwyUserTrackingDB_Database();
+        	String DBUS=appPreferences.getSciGwyUserTrackingDB_Username();
+        	String DBPW=appPreferences.getSciGwyUserTrackingDB_Password();
+        	miJobSubmission = new MultiInfrastructureJobSubmission(DBNM,DBUS,DBPW,jobDesc);
+        	_log.info("MultiInfrastructureJobSubmission [DEVEL]\n"
+        			+LS+"    DBNM: '" +  DBNM + "'"
+        			+LS+"    DBUS: '" +  DBUS + "'"
+        			+LS+"    DBPW: '" +  DBPW + "'"
+        	);
+        }
+        
+        else {
+            miJobSubmission = new MultiInfrastructureJobSubmission(jobDesc);
+            _log.info("MultiInfrastructureJobSubmission [PROD]");
+        }
+        
+        for(int i=0; i < enabledInfrastructures.length; i++) {
+            _log.info("Adding infrastructure #"+(i+1)
+                     +" - Name: '"+enabledInfrastructures[i].getName()+"'"+LS);
+            miJobSubmission.addInfrastructure(enabledInfrastructures[i]);
+        }
+        
+        // GridOperations' Application Id
+        int applicationId=Integer.parseInt(appPreferences.getGridOperationId());
+
+        // Grid Engine' UserTraking needs the portal IP address
+        String   portalIPAddress="";
+        try {
+            InetAddress addr = InetAddress.getLocalHost();
+            byte[] ipAddr=addr.getAddress();
+            portalIPAddress= ""+(short)(ipAddr[0]&0xff)
+                           +":"+(short)(ipAddr[1]&0xff)
+                           +":"+(short)(ipAddr[2]&0xff)
+                           +":"+(short)(ipAddr[3]&0xff);
+        }
+        catch(Exception e) {
+            _log.error("Unable to get the portal IP address");
+        }
+
+        // Setup job requirements
+        if(numRequirements>0)
+            miJobSubmission.setJDLRequirements(jdlRequirements);
+
+        // Ready now to submit the Job
+        miJobSubmission.submitJobAsync( appInput.getUsername()
+                                       ,portalIPAddress
+                                       ,applicationId
+                                       ,appInput.getJobIdentifier()
+                                      );
+
+        // Show log
+        // View jobSubmission details in the log
+        _log.info(
+           LS+"JobSent"
+          +LS+"-------"
+          +LS+"Portal address: '"+portalIPAddress+"'"
+          +LS+"Executable    : '"+executable     +"'"
+          +LS+"Arguments     : '"+arguments      +"'"
+          +LS+"Output path   : '"+outputPath     +"'"
+          +LS+"Output sandbox: '"+outputSandbox  +"'"
+          +LS+"Ouput file    : '"+outputFile     +"'"
+          +LS+"Error file    : '"+errorFile      +"'"
+          +LS+"Input sandbox : '"+inputSandbox   +"'"
+          +LS); // _log.info
     }
+    
+    
+    /**
+     * Returns an array of GridEngine InfrastructureInfo object isntance related to
+     * enabled instances of AppInfrastructureInfo items
+     * 
+     * @return Array of acrivated GridEngine' InfrastructureInfo infrastructures data
+     */
+    public InfrastructureInfo[] getEnabledInfrastructures(List<AppInfrastructureInfo> appInfrastructureInfoPreferences2) {
+          _log.debug(LS+"*******************************"
+                   +LS+" getEnabledInfrastructure"
+                   +LS+"*******************************"
+                   );
+          List<AppInfrastructureInfo> enabledAppInfrastructuresInfo = new ArrayList<AppInfrastructureInfo>();
+        //
+        // Determine the number of enabled infrastructures
+        //
+        int numEnabledInfrastructures=0;
+        for(int i=0; i < appInfrastructureInfoPreferences2.size(); i++) {
+            // Counts the number of enabled infrastructures
+            if(appInfrastructureInfoPreferences2.get(i).isEnableInfrastructure()){                    
+            	numEnabledInfrastructures++;
+            	enabledAppInfrastructuresInfo.add(appInfrastructureInfoPreferences2.get(i));
+            }
+        }
+        
+        _log.debug("Enabled infrastructures: '"+numEnabledInfrastructures+"'");
+
+        // Initialize the array of GridEngine' infrastructure objects
+        InfrastructureInfo infrastructuresInfo[] = new InfrastructureInfo[numEnabledInfrastructures];
+        // For each infrastructure
+        for(int i=0,h=0; i < numEnabledInfrastructures; i++) {
+            // For each enabled infrastructure ... 
+        	AppInfrastructureInfo enabledAppInfrastructureInfo = enabledAppInfrastructuresInfo.get(i);
+            
+        	// Take care of the adaptor/wms list
+            // GridEngine supports a list of WMSes/adaptors as an array of strings
+            // while the AppPreferences uses a ';' separated list of entries
+            // Following code makes the necessary conversion
+            String wmsHostList[]=null;
+            if(null != enabledAppInfrastructureInfo.getWmsHosts() && !enabledAppInfrastructureInfo.getWmsHosts().equals("")) {
+                wmsHostList = enabledAppInfrastructureInfo.getWmsHosts().split(";");
+            } // if wmsList 
+
+            // Multi-infrastructure support
+            // Different Infrastructure objects can be created accordingly to the 
+            // requested infrastructure type specified into the acronymInfrastructure
+            // field. Each infrastructure maps its specific values accordingly to
+            // several field mappings shown below on each infrastructure case
+            if(enabledAppInfrastructureInfo.getAcronymInfrastructure().equalsIgnoreCase("ssh")) {
+                    // Multi-infrastructure support (field mapping)
+                    // ssh requires to specify:
+                    // * Username      -> bdiiHost first  field of the given ';' separated string
+                    // * Password      -> bdiiHost second field of the given ';' separated string
+                    // * JSAGA adaptor -> wmsHosts
+                    String sshItems[]  = enabledAppInfrastructureInfo.getBdiiHost().split(";");
+                    int    numSshItems = sshItems.length;
+                    String username = "";
+                    String password = "";
+                    if(numSshItems>0) username=sshItems[0].trim();
+                    if(numSshItems>1) password=sshItems[1].trim();
+
+                    // Build the GridEngine' infrastructure object and assign it to the infrastructures array
+                    infrastructuresInfo[h++] = new InfrastructureInfo(enabledAppInfrastructureInfo.getAcronymInfrastructure()
+                                                                      ,"ssh"
+                                                                      ,username
+                                                                      ,password
+                                                                      ,wmsHostList);
+                    _log.debug("SSH resource: "
+                           +LS+" username:      '" + username    +"'"
+                           +LS+" password:      '" + password    +"'"
+                           +LS+" JSAGA adaptor: '" + wmsHostList +"'"
+                             );
+                } 
+//                else if(enabledAppInfrastructureInfo.getAcronymInfrastructure().equalsIgnoreCase("rocci")) {
+//                    // Multi-infrastructure support (field mapping)
+//                    // rocci requires to specify:
+//                    // * OCCI_ENDPOINT_HOST -> bdiiHost first  field of the given ';' separated string
+//                    // * Password      -> bdiiHost second field of the given ';' separated string
+//                    // * JSAGA adaptor -> wmsHosts
+//                    
+//                    String OCCI_ENDPOINT_HOST = wmsHostList[0];
+//                 
+//                    String OCCI_AUTH = "x509";
+//                    
+//                    // Possible RESOURCE values: 'os_tpl', 'resource_tpl', 'compute'
+//                    String OCCI_RESOURCE = "compute";
+//                    String OCCI_VM_TITLE = "RepastAnalysis";
+//                    
+//                    // Possible ACTION values: 'list', 'describe', 'create' and 'delete'
+//                    String OCCI_ACTION = "create";
+//                    
+//                    String[] occiItems = enabledAppInfrastructureInfo.getSoftwareTags().split(";");
+//                    int occiItemscount = occiItems.length;
+//                    
+//                    String OCCI_OS = "";
+//                    String OCCI_FLAVOR = "";
+//                    
+//                    if(occiItemscount>0) 
+//                        OCCI_OS=occiItems[0].trim();
+//                    if(occiItemscount>1) 
+//                        OCCI_FLAVOR=occiItems[1].trim();
+//                    
+//                    String rOCCIURL = OCCI_ENDPOINT_HOST + "?" +
+//                            "action=" + OCCI_ACTION + 
+//                            "&resource=" + OCCI_RESOURCE +
+//                            "&attributes_title=" + OCCI_VM_TITLE +
+//                            "&mixin_os_tpl=" + OCCI_OS +
+//                            "&mixin_resource_tpl=" + OCCI_FLAVOR +
+//                            "&auth=" + OCCI_AUTH;
+//		
+//                    String rOCCIResourcesList[] = {rOCCIURL};
+//                                        
+//                    infrastructuresInfo[h++] = new InfrastructureInfo(
+//                            getAcronymInfrastructure(i), 
+//                            getBdiiHost(i), 
+//                            rOCCIResourcesList, 
+//                            getPxServerHost(i), 
+//                            getPxServerPort(i), 
+//                            getPxRobotId(i), 
+//                            getPxRobotVO(i), 
+//                            getPxRobotRole(i), 
+//                            true
+//                    );
+//                    if(_log !=null)
+//                        _log.info(LS+"*******************************"
+//                                 +LS+"OCCI resource URL: " + rOCCIURL
+//                                 +LS+"*******************************");
+//                }
+                else {
+                    // Multi-infrastructure support (no matching cases)
+                    // If the acronym does not match to a specific infrastructure type
+                    // the preference fields will be interpreted as gLite middleware settings
+
+                    // Build the GridEngine' infrastructure object and assign it to the infrastructures array
+                    // (!)Not yet used values:
+                    //    pxServerSecure
+                    //    pxRobotRenewalFlag
+                    //    pxUserProxy                
+                    infrastructuresInfo[h++] = new InfrastructureInfo( enabledAppInfrastructureInfo .getAcronymInfrastructure()
+                                                                      ,enabledAppInfrastructureInfo.getBdiiHost()                                                                
+                                                                      ,wmsHostList
+                                                                      ,enabledAppInfrastructureInfo.getPxServerHost()
+                                                                      ,enabledAppInfrastructureInfo.getPxServerPort()
+                                                                      ,enabledAppInfrastructureInfo.getPxRobotId()
+                                                                      ,enabledAppInfrastructureInfo.getPxRobotVO()
+                                                                      ,enabledAppInfrastructureInfo.getPxRobotRole()                                                                
+                                                                      ,enabledAppInfrastructureInfo.getSoftwareTags()
+                                                                     );
+                }                
+                // Shows the added infrastructure
+                _log.info(LS+appInfrastructureInfoPreferences2.get(i).dump());
+            
+        } // for each infrastructure
+        return infrastructuresInfo;
+    }
+    
 }
