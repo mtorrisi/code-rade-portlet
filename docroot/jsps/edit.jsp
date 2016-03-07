@@ -16,8 +16,6 @@
 <jsp:useBean id="appPreferences" class="it.dfa.unict.AppPreferences" scope="request" />
 
 <%
-	String commonImgPath = "/html/themes/classic/images/common/";
-
 	int infrastrucuresCount = 0;
 	if(appInfrastructureInfoPreferences != null)
 		infrastrucuresCount = appInfrastructureInfoPreferences.size();
@@ -125,7 +123,12 @@
 					<liferay-ui:search-container-column-text name="acronym"
 						value="<%=infrastructure.getAcronymInfrastructure()%>" />
 					<liferay-ui:search-container-column-text name="status">
-						<img src="<%= infrastructure.isEnableInfrastructure() ? commonImgPath + "activate.png" : commonImgPath + "deactivate.png" %>" />
+						<c:if test="<%= infrastructure.isEnableInfrastructure() %>">
+							<liferay-ui:icon image="activate" />
+						</c:if>
+						<c:if test="<%= !infrastructure.isEnableInfrastructure() %>">
+							<liferay-ui:icon image="deactivate" />
+						</c:if>
 					</liferay-ui:search-container-column-text>
 					<liferay-ui:search-container-column-jsp path="/jsps/infra-action.jsp"/>
 				</liferay-ui:search-container-row>
